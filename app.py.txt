@@ -1,0 +1,77 @@
+from flask import Flask, request, jsonify, render_template
+import requests
+from bs4 import BeautifulSoup
+import os
+
+app = Flask(__name__)
+
+def scrape_shopee_product(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code != 200:
+        return {"error": "Failed to fetch data"}
+    
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    title = soup.find('title').text if soup.find('title') else "No title"
+    price = soup.find('div', class_='product-price').text if soup.find('div', class_='product-price') else "No price"
+    image = soup.find('img', class_='product-image')['src'] if soup.find('img', class_='product-image') else "No image"
+    description = soup.find('div', class_='product-description').text if soup.find('div', class_='product-description') else "No description"
+    
+    return {
+        "title": title,
+        "price": price,
+        "image": image,
+        "description": description
+    }
+
+@app.route('/')
+def home():
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Shopee Scraper</title>
+        <script>
+            function scrapeProduct() {
+                let url = document.getElementById("url").value;
+                fetch("/scrape", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({url: url})
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("result").innerHTML = `<h2>${data.title}</h2>
+                        <p>Price: ${data.price}</p>
+                        <img src="${data.image}" width="200">
+                        <p>${data.description}</p>`;
+                })
+                .catch(error => console.error("Error:", error));
+            }
+        </script>
+    </head>
+    <body>
+        <h1>Shopee Product Scraper</h1>
+        <input type="text" id="url" placeholder="Enter Shopee product URL">
+        <button onclick="scrapeProduct()">Scrape</button>
+        <div id="result"></div>
+    </body>
+    </html>
+    '''
+
+@app.route('/scrape', methods=['POST'])
+def scrape():
+    data = request.json
+    url = data.get('url')
+    
+    if not url:
+        return jsonify({"error": "No URL provided"}), 400
+    
+    result = scrape_shopee_product(url)
+    return jsonify(result)
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
